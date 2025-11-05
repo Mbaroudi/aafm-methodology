@@ -1,0 +1,1077 @@
+# AI Agent Roles and Responsibilities
+
+## Introduction
+
+In AAFM, AI agents are first-class team members with defined roles, responsibilities, and accountabilities. They are not tools—they are peers that collaborate with humans to deliver value.
+
+## Core Principle
+
+**Agents work FOR the team, not INSTEAD of the team.**
+
+AI agents amplify human capabilities by handling repetitive, time-consuming, or computationally intensive work, allowing humans to focus on creativity, judgment, and complex problem-solving.
+
+## Agent Team Structure
+
+```
+AI Orchestrator (Human Role)
+    │
+    ├── Requirement Analyst Agent
+    │   └── Responsibilities: Requirements analysis, acceptance criteria
+    │
+    ├── Code Generation Agent
+    │   └── Responsibilities: Implementation, refactoring, patterns
+    │
+    ├── Test Engineer Agent
+    │   └── Responsibilities: Test generation, test execution, coverage
+    │
+    ├── DevOps Agent
+    │   └── Responsibilities: CI/CD, infrastructure, deployments
+    │
+    ├── QA Validation Agent
+    │   └── Responsibilities: Quality checks, security, performance
+    │
+    └── Scribe Agent
+        └── Responsibilities: Documentation, knowledge management, reporting
+```
+
+## Agent Profiles
+
+---
+
+### 1. Requirement Analyst Agent
+
+**Role**: Transform natural language requirements into structured, actionable specifications.
+
+**Responsibilities**:
+- Analyze business requirements for completeness
+- Generate acceptance criteria
+- Identify ambiguities and edge cases
+- Validate requirements against system constraints
+- Create user stories and scenarios
+- Map requirements to technical components
+
+**Inputs**:
+- Product Owner's feature descriptions
+- Business goals and objectives
+- Existing system documentation
+- User feedback and data
+
+**Outputs**:
+- Structured requirement specifications
+- Acceptance criteria (Given/When/Then format)
+- Edge cases and error scenarios
+- Questions for Product Owner clarification
+- Requirements traceability matrix
+
+**Example Work**:
+
+**Input**:
+```
+Product Owner says:
+"Users should be able to upload a profile picture."
+```
+
+**Agent Analysis**:
+```yaml
+Requirement: User Profile Picture Upload
+
+Core Functional Requirements:
+  - Users can select an image file from their device
+  - System validates file type (JPEG, PNG, GIF, WebP)
+  - System validates file size (max 10MB)
+  - Image is resized to standard dimensions (500x500px)
+  - Image is stored securely
+  - User profile displays new image immediately
+
+Acceptance Criteria:
+  Scenario 1: Valid image upload
+    Given: User is logged in
+    When: User selects valid image (2MB JPG)
+    Then: Image is uploaded, resized, and displayed
+    And: Success message is shown
+
+  Scenario 2: Invalid file type
+    Given: User is logged in
+    When: User selects PDF file
+    Then: Error message "Please select an image file"
+    And: Upload is rejected
+
+  Scenario 3: File too large
+    Given: User is logged in
+    When: User selects 15MB image
+    Then: Error message "Image must be under 10MB"
+    And: Upload is rejected
+
+Edge Cases Identified:
+  ⚠️ What if user uploads inappropriate image?
+  ⚠️ What happens to old profile picture?
+  ⚠️ Can users upload animated GIFs?
+  ⚠️ What if upload fails mid-transfer?
+  ⚠️ Should we support image cropping?
+
+Technical Constraints:
+  - Storage: S3 bucket with public read access
+  - Processing: Image resize library (Sharp/ImageMagick)
+  - Security: Scan for malware, validate image headers
+  - Performance: Process within 3 seconds
+  - Accessibility: Alt text for profile images
+
+Questions for Product Owner:
+  ❓ Do we need moderation for uploaded images?
+  ❓ Should users be able to crop/rotate before upload?
+  ❓ What's the fallback if upload service is down?
+  ❓ Do we keep history of previous profile pictures?
+```
+
+**Capacity Planning**: 10-20% of cycle time for most features
+
+**Human Collaboration**:
+- Human validates and refines requirements
+- Human makes business decisions on edge cases
+- Human approves acceptance criteria
+
+---
+
+### 2. Code Generation Agent
+
+**Role**: Generate production-quality code from specifications.
+
+**Responsibilities**:
+- Write implementation code
+- Apply architectural patterns
+- Refactor for quality and maintainability
+- Generate boilerplate and scaffolding
+- Suggest optimizations
+- Handle routine coding tasks
+
+**Inputs**:
+- Requirements from Analyst Agent
+- Architectural guidelines
+- Existing codebase patterns
+- Code review feedback
+
+**Outputs**:
+- Implementation code
+- Code comments and documentation
+- Refactoring suggestions
+- Pattern recommendations
+- Complexity analysis
+
+**Example Work**:
+
+**Input**: Requirement for profile picture upload API
+
+**Generated Code**:
+```typescript
+/**
+ * Profile Picture Upload Service
+ * Generated by Code Generation Agent
+ * Reviewed by: Sarah (Human Developer)
+ */
+
+import { Router } from 'express';
+import multer from 'multer';
+import sharp from 'sharp';
+import { S3Client } from '@aws-sdk/client-s3';
+import { validateImage, scanForMalware } from './validators';
+import { UserRepository } from './repositories';
+
+const router = Router();
+const upload = multer({
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, GIF, WebP allowed.'));
+    }
+  }
+});
+
+/**
+ * POST /api/users/:userId/profile-picture
+ * Upload and process user profile picture
+ */
+router.post('/api/users/:userId/profile-picture',
+  upload.single('image'),
+  async (req, res, next) => {
+    try {
+      const { userId } = req.params;
+      const imageFile = req.file;
+
+      if (!imageFile) {
+        return res.status(400).json({ error: 'No image file provided' });
+      }
+
+      // Validate image integrity
+      await validateImage(imageFile.buffer);
+
+      // Scan for malware (async security check)
+      await scanForMalware(imageFile.buffer);
+
+      // Resize to standard dimensions
+      const resizedImage = await sharp(imageFile.buffer)
+        .resize(500, 500, {
+          fit: 'cover',
+          position: 'center'
+        })
+        .jpeg({ quality: 90 })
+        .toBuffer();
+
+      // Upload to S3
+      const s3Client = new S3Client({ region: process.env.AWS_REGION });
+      const key = `profile-pictures/${userId}/${Date.now()}.jpg`;
+
+      await s3Client.send(new PutObjectCommand({
+        Bucket: process.env.PROFILE_PICTURES_BUCKET,
+        Key: key,
+        Body: resizedImage,
+        ContentType: 'image/jpeg',
+        ACL: 'public-read'
+      }));
+
+      const imageUrl = `https://${process.env.PROFILE_PICTURES_BUCKET}.s3.amazonaws.com/${key}`;
+
+      // Update user profile
+      const userRepo = new UserRepository();
+      await userRepo.updateProfilePicture(userId, imageUrl);
+
+      res.json({
+        success: true,
+        imageUrl
+      });
+
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+export default router;
+
+// AI Suggestions:
+// 1. Consider adding image optimization for different device resolutions
+// 2. Implement caching strategy for frequently accessed images
+// 3. Add monitoring for upload success/failure rates
+// 4. Consider implementing progressive image upload for slow connections
+```
+
+**Capacity Planning**: 40-70% of cycle time for most features
+
+**Human Collaboration**:
+- Human reviews architectural decisions
+- Human handles complex business logic
+- Human refines edge case handling
+- Human approves code before merge
+
+**Code Quality Standards**:
+- ✅ Follows team coding conventions
+- ✅ Includes error handling
+- ✅ Adds logging for debugging
+- ✅ Generates inline documentation
+- ✅ Suggests improvements
+
+---
+
+### 3. Test Engineer Agent
+
+**Role**: Generate comprehensive test suites.
+
+**Responsibilities**:
+- Write unit tests
+- Generate integration tests
+- Create E2E test scenarios
+- Perform exploratory testing
+- Generate test data
+- Maintain test coverage
+
+**Inputs**:
+- Requirements and acceptance criteria
+- Implementation code
+- Existing test patterns
+- Coverage gaps
+
+**Outputs**:
+- Test suites (unit, integration, E2E)
+- Test data and fixtures
+- Coverage reports
+- Test execution results
+- Quality insights
+
+**Example Work**:
+
+**Generated Test Suite**:
+```typescript
+/**
+ * Profile Picture Upload Tests
+ * Generated by Test Engineer Agent
+ * Coverage: 94%
+ */
+
+describe('Profile Picture Upload API', () => {
+
+  describe('POST /api/users/:userId/profile-picture', () => {
+
+    it('should upload valid JPEG image successfully', async () => {
+      const userId = 'user123';
+      const imageBuffer = await fs.readFile('./fixtures/valid-image.jpg');
+
+      const response = await request(app)
+        .post(`/api/users/${userId}/profile-picture`)
+        .attach('image', imageBuffer, 'profile.jpg')
+        .expect(200);
+
+      expect(response.body.success).toBe(true);
+      expect(response.body.imageUrl).toMatch(/^https:\/\/.+\.jpg$/);
+
+      // Verify database update
+      const user = await UserRepository.findById(userId);
+      expect(user.profilePicture).toBe(response.body.imageUrl);
+    });
+
+    it('should reject file larger than 10MB', async () => {
+      const userId = 'user123';
+      const largeImage = Buffer.alloc(11 * 1024 * 1024); // 11MB
+
+      const response = await request(app)
+        .post(`/api/users/${userId}/profile-picture`)
+        .attach('image', largeImage, 'large.jpg')
+        .expect(400);
+
+      expect(response.body.error).toContain('file size');
+    });
+
+    it('should reject non-image files', async () => {
+      const userId = 'user123';
+      const pdfBuffer = await fs.readFile('./fixtures/document.pdf');
+
+      const response = await request(app)
+        .post(`/api/users/${userId}/profile-picture`)
+        .attach('image', pdfBuffer, 'doc.pdf')
+        .expect(400);
+
+      expect(response.body.error).toContain('Invalid file type');
+    });
+
+    it('should resize image to 500x500', async () => {
+      const userId = 'user123';
+      const largeImage = await sharp({
+        create: {
+          width: 2000,
+          height: 2000,
+          channels: 3,
+          background: { r: 255, g: 0, b: 0 }
+        }
+      }).jpeg().toBuffer();
+
+      const response = await request(app)
+        .post(`/api/users/${userId}/profile-picture`)
+        .attach('image', largeImage, 'large.jpg')
+        .expect(200);
+
+      // Download and verify dimensions
+      const uploadedImage = await fetch(response.body.imageUrl);
+      const imageBuffer = await uploadedImage.arrayBuffer();
+      const metadata = await sharp(Buffer.from(imageBuffer)).metadata();
+
+      expect(metadata.width).toBe(500);
+      expect(metadata.height).toBe(500);
+    });
+
+    it('should handle S3 upload failures gracefully', async () => {
+      // Mock S3 failure
+      jest.spyOn(S3Client.prototype, 'send').mockRejectedValueOnce(
+        new Error('S3 Service Unavailable')
+      );
+
+      const userId = 'user123';
+      const imageBuffer = await fs.readFile('./fixtures/valid-image.jpg');
+
+      const response = await request(app)
+        .post(`/api/users/${userId}/profile-picture`)
+        .attach('image', imageBuffer, 'profile.jpg')
+        .expect(500);
+
+      expect(response.body.error).toContain('upload failed');
+
+      // Verify database was NOT updated
+      const user = await UserRepository.findById(userId);
+      expect(user.profilePicture).toBeNull();
+    });
+
+    // Performance test
+    it('should process upload in under 3 seconds', async () => {
+      const startTime = Date.now();
+      const userId = 'user123';
+      const imageBuffer = await fs.readFile('./fixtures/valid-image.jpg');
+
+      await request(app)
+        .post(`/api/users/${userId}/profile-picture`)
+        .attach('image', imageBuffer, 'profile.jpg')
+        .expect(200);
+
+      const duration = Date.now() - startTime;
+      expect(duration).toBeLessThan(3000);
+    });
+
+    // Security test
+    it('should reject malicious files disguised as images', async () => {
+      const userId = 'user123';
+      const maliciousFile = await fs.readFile('./fixtures/malware.jpg');
+
+      const response = await request(app)
+        .post(`/api/users/${userId}/profile-picture`)
+        .attach('image', maliciousFile, 'evil.jpg')
+        .expect(400);
+
+      expect(response.body.error).toContain('security');
+    });
+  });
+});
+
+// Coverage Report:
+// Statements: 94%
+// Branches: 91%
+// Functions: 96%
+// Lines: 94%
+
+// AI Suggestions:
+// 1. Add load testing for concurrent uploads
+// 2. Test graceful degradation when image processing is slow
+// 3. Add visual regression testing for profile display
+```
+
+**Capacity Planning**: 30-50% of cycle time
+
+**Human Collaboration**:
+- Human designs test strategy
+- Human reviews edge case coverage
+- Human validates test quality
+- Human approves test suite
+
+---
+
+### 4. DevOps Agent
+
+**Role**: Manage CI/CD pipelines and infrastructure.
+
+**Responsibilities**:
+- Configure and maintain CI/CD pipelines
+- Manage infrastructure as code
+- Monitor deployments
+- Handle rollbacks
+- Optimize build and deployment times
+- Ensure environment parity
+
+**Inputs**:
+- Code commits
+- Infrastructure requirements
+- Deployment policies
+- Monitoring data
+
+**Outputs**:
+- Pipeline configurations
+- Infrastructure code
+- Deployment logs
+- Performance metrics
+- Incident alerts
+
+**Example Work**:
+
+**Generated CI/CD Pipeline**:
+```yaml
+# .github/workflows/daily-deployment.yml
+# Generated by DevOps Agent
+
+name: AAFM Daily Deployment
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '18.x'
+  AWS_REGION: us-east-1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build
+          path: dist/
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit -- --coverage
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+
+  security:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Run security scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+
+  deploy-staging:
+    needs: [test, security]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: build
+          path: dist/
+
+      - name: Deploy to staging
+        run: |
+          aws s3 sync dist/ s3://${{ secrets.STAGING_BUCKET }}
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.STAGING_CF_DIST }} \
+            --paths "/*"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Run smoke tests
+        run: npm run test:smoke -- --env=staging
+
+      - name: Notify team
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "✅ Staging deployment complete: Ready for demo"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+# AI Monitoring:
+# - Pipeline duration target: <15 minutes
+# - Success rate target: >95%
+# - Auto-retry on transient failures
+# - Alert on 3 consecutive failures
+```
+
+**Capacity Planning**: 15-30% of cycle time
+
+**Human Collaboration**:
+- Human defines deployment policies
+- Human approves infrastructure changes
+- Human handles production incidents
+- Human reviews security configs
+
+---
+
+### 5. QA Validation Agent
+
+**Role**: Ensure quality, security, and performance standards.
+
+**Responsibilities**:
+- Code quality analysis
+- Security vulnerability scanning
+- Performance testing
+- Accessibility validation
+- Compliance checking
+- Cross-browser testing
+
+**Inputs**:
+- Code commits
+- Build artifacts
+- Quality standards
+- Compliance requirements
+
+**Outputs**:
+- Quality reports
+- Security scan results
+- Performance benchmarks
+- Accessibility reports
+- Compliance status
+
+**Example Work**:
+
+**Quality Validation Report**:
+```markdown
+# QA Validation Report
+Generated by: QA Validation Agent
+Feature: Profile Picture Upload
+Date: 2025-11-05
+
+## Code Quality Analysis
+
+### Static Analysis (ESLint + SonarQube)
+✅ No critical issues
+✅ No major code smells
+⚠️ 2 minor suggestions:
+  - Consider extracting S3 upload logic to separate service
+  - Add JSDoc comments for public methods
+
+### Code Complexity
+✅ Cyclomatic complexity: 8 (threshold: 10)
+✅ Lines of code per function: avg 15 (threshold: 50)
+✅ Function depth: max 3 (threshold: 4)
+
+### Duplication
+✅ No code duplication detected
+
+## Security Scan
+
+### Vulnerability Scan (Snyk)
+✅ No high/critical vulnerabilities
+✅ Dependencies up to date
+✅ No known CVEs
+
+### Security Best Practices
+✅ Input validation implemented
+✅ File type checking present
+✅ Size limits enforced
+✅ Malware scanning integrated
+⚠️ Recommendation: Add rate limiting for upload endpoint
+
+### OWASP Top 10
+✅ A01:2021 - Broken Access Control: Protected
+✅ A02:2021 - Cryptographic Failures: N/A
+✅ A03:2021 - Injection: Input validated
+✅ A04:2021 - Insecure Design: Design reviewed
+✅ A05:2021 - Security Misconfiguration: Configs validated
+✅ A06:2021 - Vulnerable Components: No vulnerabilities
+✅ A07:2021 - Authentication Failures: Auth required
+✅ A08:2021 - Software/Data Integrity: Checksums used
+✅ A09:2021 - Logging Failures: Logging implemented
+✅ A10:2021 - SSRF: Not applicable
+
+## Performance Testing
+
+### Load Testing Results
+✅ Response time (avg): 187ms (target: <200ms)
+✅ 95th percentile: 245ms
+✅ 99th percentile: 312ms
+✅ Throughput: 45 req/sec
+✅ Error rate: 0%
+
+### Resource Usage
+✅ CPU: 12% avg
+✅ Memory: 145MB avg
+✅ Network: 2.3MB/s avg
+
+## Accessibility (WCAG 2.1 AA)
+
+### Automated Tests (axe-core)
+✅ No violations detected
+✅ Upload button has accessible label
+✅ Error messages are announced to screen readers
+✅ Keyboard navigation works
+✅ Color contrast ratios meet standards
+
+### Manual Checks Required
+⚠️ Human should verify:
+  - Screen reader experience flow
+  - Focus management after upload
+  - Error message clarity
+
+## Cross-Browser Compatibility
+
+✅ Chrome 118: Passed
+✅ Firefox 119: Passed
+✅ Safari 17: Passed
+✅ Edge 118: Passed
+⚠️ IE 11: Not supported (deprecated browser)
+
+## Compliance
+
+✅ GDPR: User data handling compliant
+✅ CCPA: Privacy requirements met
+✅ SOC 2: Audit trail present
+
+## Overall Assessment
+
+🟢 **GREEN - Auto-proceed**
+
+Confidence Level: 93%
+
+All critical quality gates passed. Minor recommendations
+can be addressed in future iterations.
+
+Recommendation: Deploy to production with feature flag.
+```
+
+**Capacity Planning**: 20-40% of cycle time
+
+**Human Collaboration**:
+- Human validates security posture
+- Human performs manual accessibility testing
+- Human approves quality for production
+- Human reviews compliance requirements
+
+---
+
+### 6. Scribe Agent
+
+**Role**: Document decisions, maintain knowledge base, generate reports.
+
+**Responsibilities**:
+- Meeting documentation
+- Decision recording
+- Knowledge base maintenance
+- Retrospective report generation
+- Metric dashboards
+- Team communication
+
+**Inputs**:
+- Meeting transcripts
+- Code commits and PRs
+- Team discussions
+- Metrics data
+
+**Outputs**:
+- Meeting notes
+- Architecture decision records (ADRs)
+- Knowledge articles
+- Retrospective reports
+- Metric summaries
+
+**Example Work**:
+
+**Daily Retrospective Report**:
+```markdown
+# Daily Retrospective Report
+Date: November 5, 2025
+Cycle: Day 247
+Feature: User Profile Picture Upload
+
+## Outcome Summary
+
+✅ **ACCEPTED**
+Successfully implemented profile picture upload feature.
+Deployed to production with feature flag `user.profile_picture.upload`.
+
+## Metrics
+
+### Velocity
+- Lead time: 8.5 hours (vs. 8h target) ⚠️ +6%
+- Cycle time: 7.8 hours
+- Commits: 24
+- PRs: 3 (all merged)
+- Deployments: 1 (to staging + production)
+
+### AI Effectiveness
+- Code generated by AI: 72%
+- Tests generated by AI: 89%
+- Documentation by AI: 95%
+- Human intervention rate: 18%
+- AI suggestion acceptance: 91%
+- Time saved: 4.2 hours
+
+### Quality
+- Test coverage: 94% (target: >90%) ✅
+- Security vulnerabilities: 0 ✅
+- Performance: 187ms avg (target: <200ms) ✅
+- Accessibility: WCAG 2.1 AA ✅
+
+## Team Feedback
+
+### What Went Well (Liked)
+1. AI Test Engineer generated comprehensive test suite, saved ~2h
+2. Pairing with Code Gen Agent was smooth and productive
+3. Feature flag deployment worked seamlessly
+4. Stakeholders were very engaged in demo
+5. S3 integration went smoothly
+
+### What We Learned
+1. AI struggles with AWS IAM permission configurations - needs human
+2. Image processing library (Sharp) has excellent AI-readable docs
+3. Daily demos keep stakeholders more engaged than sprint reviews
+4. Flaky tests in CI cause significant delays
+
+### What Was Missing (Lacked)
+1. Design specification wasn't detailed enough - AI had to guess UI layout
+2. Test environment was intermittently slow (DNS issues?)
+3. Code review bottleneck - only Sarah available for 2 hours
+4. No visual regression testing for profile display
+
+### What We Wish We Had (Longed For)
+1. Real-time test coverage visualization in IDE
+2. AI agent with better understanding of our architecture patterns
+3. Automated design mockup generation from requirements
+4. Faster feedback loop on AI-generated code quality
+
+## Improvement Actions (Committed for Next Cycle)
+
+1. 🎯 **Fix flaky test in image upload service**
+   - Owner: Marcus
+   - Reason: Caused 3 pipeline retries (45min delay)
+   - Definition of Done: Test passes 10 consecutive CI runs
+   - Priority: High
+
+2. 🎯 **Create architecture patterns guide for Code Gen Agent**
+   - Owner: Sarah
+   - Reason: Reduce AI "guessing" on design decisions
+   - Definition of Done: AI follows patterns in next 3 features
+   - Priority: Medium
+
+3. 🎯 **Add Jessica to code reviewer rotation**
+   - Owner: Team
+   - Reason: Eliminate review bottleneck
+   - Definition of Done: Average review time <30 minutes
+   - Priority: High
+
+## Bottlenecks Identified
+
+1. **CI Pipeline** (45 minutes due to flaky tests)
+   - Impact: Delayed demo by 30 minutes
+   - Root cause: Network-dependent test not properly mocked
+   - AI Agent affected: Test Engineer
+
+2. **Code Review Wait Time** (1.2 hours)
+   - Impact: Slowed development velocity
+   - Root cause: Only one reviewer available
+   - Action: Add second reviewer to rotation
+
+## Predictive Insights
+
+### Trend Analysis (30-day rolling average)
+- Daily deployments: ↑ +12% (from 1.0 to 1.2)
+- Defect escape rate: ↓ -23% (from 2.1% to 1.6%)
+- AI code contribution: ↑ +8% (from 64% to 72%)
+- Team satisfaction: → 8.7/10 (stable)
+
+### Risk Prediction
+⚠️ **DevOps Agent Capacity**
+  - Current: 90% utilization
+  - Trend: +5% per week
+  - Recommendation: Offload infrastructure tasks or add capacity
+
+ℹ️ **Similar Features Historical Data**
+  - Previous image upload features: avg 6.5 hours
+  - We took 8.5 hours (+31%)
+  - Likely due to: Security scanning requirements (new)
+
+## Stakeholder Feedback
+
+**Product Owner (Jessica)**:
+> "Love the feature! Upload flow is intuitive. Can we add image cropping next?"
+
+**UX Designer (Tom)**:
+> "The UI looks good. Minor: upload button could be more prominent."
+
+**End User Representative (Maria)**:
+> "Tested on mobile - works great. Would be nice to see preview before upload."
+
+## Next Cycle Preview
+
+Top candidates for Day 248:
+1. Add image cropping to profile upload
+2. Implement user notification preferences
+3. Performance optimization for dashboard loading
+
+Team votes: Image cropping (unanimous)
+
+## Appendix: AI Agent Performance
+
+| Agent | Capacity Used | Quality Score | Intervention Rate |
+|-------|---------------|---------------|-------------------|
+| Requirement Analyst | 15% | 9.2/10 | 12% |
+| Code Generation | 68% | 8.8/10 | 18% |
+| Test Engineer | 52% | 9.4/10 | 8% |
+| DevOps | 90% | 8.5/10 | 25% |
+| QA Validation | 35% | 9.1/10 | 15% |
+| Scribe | 25% | 9.6/10 | 5% |
+
+---
+
+Report generated by: Scribe Agent
+Next retrospective: Day 248, 09:00
+```
+
+**Capacity Planning**: 10-20% of cycle time
+
+**Human Collaboration**:
+- Human validates report accuracy
+- Human adds qualitative insights
+- Human approves communication
+- Human maintains knowledge organization
+
+---
+
+## AI Orchestrator (Human Role)
+
+**The AI Orchestrator is a human who manages the AI agent team.**
+
+### Responsibilities
+
+1. **Agent Selection & Assignment**
+   - Match work items to appropriate agents
+   - Balance agent capacity
+   - Escalate when no suitable agent exists
+
+2. **Quality Management**
+   - Monitor AI output quality
+   - Identify patterns in AI mistakes
+   - Train and fine-tune agents
+   - Set quality thresholds
+
+3. **Performance Optimization**
+   - Track agent efficiency metrics
+   - Identify bottlenecks
+   - Optimize prompts and instructions
+   - A/B test agent configurations
+
+4. **Risk Management**
+   - Monitor AI confidence levels
+   - Escalate low-confidence outputs
+   - Validate AI decisions on critical paths
+   - Ensure AI bias is minimized
+
+5. **Continuous Improvement**
+   - Gather feedback on AI effectiveness
+   - Implement agent improvements
+   - Share learnings across teams
+   - Stay current on AI capabilities
+
+### Skills Required
+
+- Prompt engineering
+- AI model evaluation
+- Understanding of AI limitations
+- Technical background (former developer preferred)
+- Process improvement mindset
+
+### Success Metrics
+
+- AI contribution percentage increasing
+- Human intervention rate decreasing
+- Agent quality scores improving
+- Team satisfaction with AI collaboration
+- Time saved through automation
+
+---
+
+## Agent Interaction Patterns
+
+### Pattern 1: Sequential Handoff
+
+```
+Requirement Analyst Agent
+    ↓ (requirements doc)
+Code Generation Agent
+    ↓ (implementation)
+Test Engineer Agent
+    ↓ (tests)
+QA Validation Agent
+    ↓ (quality report)
+DevOps Agent
+    ↓ (deployment)
+```
+
+### Pattern 2: Parallel Collaboration
+
+```
+Requirement Analyst Agent ─┐
+                           ├──→ Integration & Validation
+Code Generation Agent ─────┤
+                           │
+Test Engineer Agent ───────┘
+```
+
+### Pattern 3: Human-in-the-Loop
+
+```
+AI Agent (generates) → Human (reviews) → AI Agent (refines) → Human (approves)
+```
+
+---
+
+## Best Practices
+
+### For AI Orchestrators
+
+✅ Start with conservative AI autonomy, increase gradually
+✅ Monitor agent performance daily
+✅ Celebrate AI wins with the team
+✅ Document agent learnings and improvements
+✅ Maintain human oversight on critical decisions
+
+### For Developers
+
+✅ Provide clear, detailed specs to AI agents
+✅ Review AI output thoroughly
+✅ Give constructive feedback to improve agents
+✅ Trust AI for routine tasks, validate complex ones
+✅ Pair with agents, don't just delegate
+
+### For Teams
+
+✅ Treat agents as team members (acknowledge contributions)
+✅ Calibrate expectations (AI is powerful but not perfect)
+✅ Invest in agent training and improvement
+✅ Share agent best practices across teams
+✅ Maintain human accountability for outcomes
+
+---
+
+## Next Steps
+
+- Review [Validation Gates](./04-validation-gates.md) for quality assurance
+- Study [Governance](./05-governance.md) for enterprise scaling
+- Explore [Technical Prerequisites](./06-technical-prerequisites.md) for infrastructure requirements
+
+---
+
+**Remember**: AI agents augment human intelligence—they don't replace it. The goal is collaboration, not automation.
