@@ -140,11 +140,21 @@ This methodology is designed to evolve. We welcome contributions:
 
 ## License
 
-[Choose appropriate license]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Contact
+Copyright (c) 2025 Malek Baroudi
 
-[Add contact information for methodology maintainers]
+## Maintainer & Contact
+
+**Malek Baroudi**
+- Email: baroudi.malek@gmail.com
+- GitHub: [@Mbaroudi](https://github.com/Mbaroudi)
+- Repository: [github.com/Mbaroudi/aafm-methodology](https://github.com/Mbaroudi/aafm-methodology)
+
+For questions, suggestions, or contributions, please:
+- Open an issue on GitHub
+- Submit a pull request
+- Contact via email
 
 ---
 
